@@ -275,4 +275,3 @@ dependencies:
   - zstd=1.5.7=h6491c7d_2
   - pip:
       - rank-bm25==0.2.2
-prefix: /Users/fiona/anaconda3/envs/researchmate
