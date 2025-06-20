@@ -33,6 +33,7 @@ def hybrid_search(query, papers, top_k=5):
     bm25_norm = (bm25_scores - np.min(bm25_scores)) / (np.ptp(bm25_scores) + 1e-6)
     hybrid_scores = 0.5 * bm25_norm + 0.5 * faiss_scores
 
-    # Rank and return top results
+    # Rank and return top results 
+    # Pending: add thresholding and filtering
     ranked_indices = np.argsort(hybrid_scores)[::-1][:top_k]
     return [papers[i] for i in ranked_indices]
