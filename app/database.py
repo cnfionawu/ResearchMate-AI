@@ -2,6 +2,7 @@ import sqlite3
 import arxiv
 import os
 import time
+import requests
 
 DB_PATH = os.path.join("data", "papers.db")
 
@@ -47,6 +48,90 @@ def fetch_arxiv(query, max_results=20):
 
     end_time = time.time()
     print(f"Found {len(results)} papers in {end_time - start_time:.2f} seconds.")
+    return results
+
+
+def fetch_semantic_scholar(query, max_results=20):
+    print(f"Fetching from Semantic Scholar: '{query}' ...")
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    query_params = {
+        "query": query,
+        "limit": max_results,
+        "fields": "title,authors,abstract,url"
+    }
+
+    try:
+        response = requests.get(url, params=query_params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        results = []
+        for paper in data.get('data', []):
+            paper_id = paper.get('paperId', '')
+            title = paper.get('title') or ''
+            abstract = paper.get('abstract') or ''
+            authors_list = paper.get('authors', [])
+            authors = ", ".join(a.get('name', '') for a in authors_list)
+
+            # Skip paper if title or abstract is missing
+            if not title.strip() or not abstract.strip():
+                print(f"Skipping paper with missing title/abstract: {paper_id}")
+                continue
+
+            results.append((paper_id, title.strip(), authors, abstract.strip(), "semantic scholar"))
+
+        print(f"Found {len(results)} papers.")
+    except Exception as e:
+        print(f"Error fetching from Semantic Scholar: {e}")
+        results = []
+
+    return results
+
+
+def fetch_openalex(query, max_results=20):
+    print(f"Fetching from OpenAlex: '{query}' ...")
+    url = "https://api.openalex.org/works"
+    params = {
+        "search": query,
+        "per-page": max_results,
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        results = []
+        for item in data.get("results", []):
+            paper_id = item.get("id", "")
+            title = item.get("title") or ""
+            abstract = item.get("abstract_inverted_index")
+            authorships = item.get("authorships", [])
+            authors = ", ".join(a.get("author", {}).get("display_name", "") for a in authorships)
+
+            # Convert abstract_inverted_index to string
+            if isinstance(abstract, dict):
+                # Inverted index: word -> positions
+                words = [None] * (max(pos for positions in abstract.values() for pos in positions) + 1)
+                for word, positions in abstract.items():
+                    for pos in positions:
+                        words[pos] = word
+                abstract = " ".join(w for w in words if w)
+            else:
+                abstract = ""
+
+            # Skip if no usable title or abstract
+            if not title.strip() or not abstract.strip():
+                print(f"Skipping OpenAlex paper with missing title/abstract: {paper_id}")
+                continue
+
+            results.append((paper_id, title.strip(), authors, abstract.strip(), "openalex"))
+
+        print(f"Found {len(results)} papers.")
+    except Exception as e:
+        print(f"Error fetching from OpenAlex: {e}")
+        results = []
+
     return results
 
 

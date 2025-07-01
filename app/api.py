@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from app.database import (
     init_db,
     fetch_arxiv,
+    fetch_semantic_scholar,
+    fetch_openalex,
     save_papers,
     query_papers_from_db,
     get_query_last_fetched,
@@ -28,7 +30,10 @@ def search():
     # Check freshness and fetch if needed
     last_fetched = get_query_last_fetched(query)
     if last_fetched is None or time.time() - last_fetched > STALE_SECONDS:
-        new_papers = fetch_arxiv(query)
+        new_arxiv_papers = fetch_arxiv(query)
+        new_semantic_papers = fetch_semantic_scholar(query)
+        new_openalex_papers = fetch_openalex(query)
+        new_papers = new_arxiv_papers + new_semantic_papers + new_openalex_papers
         save_papers(new_papers)
         update_query_timestamp(query)
     else:
@@ -50,6 +55,7 @@ def search():
     ranked = hybrid_search(query, local_results)
     top = ranked[:TOP_K]
     summaries = summarize([paper[3] for paper in top])  # abstract id=3
+    print(f"Hybrid searched {len(top)} papers for query '{query}'")
 
     return jsonify([
         {
@@ -67,7 +73,10 @@ def refresh():
     if not query:
         return jsonify({"error": "Query parameter required"}), 400
 
-    new_papers = fetch_arxiv(query)
+    new_arxiv_papers = fetch_arxiv(query)
+    new_semantic_papers = fetch_semantic_scholar(query)
+    new_openalex_papers = fetch_openalex(query)
+    new_papers = new_arxiv_papers + new_semantic_papers + new_openalex_papers
     save_papers(new_papers)
     update_query_timestamp(query)
 
