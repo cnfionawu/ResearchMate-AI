@@ -1,4 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+import os
+import time
+
 from app.database import (
     init_db,
     fetch_arxiv,
@@ -12,15 +16,18 @@ from app.database import (
 )
 from app.retrieval import hybrid_search
 from app.summarizer import summarize
-import time
-from flask_cors import CORS
 
-app = Flask(__name__)
-CORS(app) # Enable CORS for all routes
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
+CORS(app)  # Enable CORS for all routes
 init_db()
 
 STALE_SECONDS = 7 * 24 * 3600  # 1 week
 TOP_K = 5
+
+
+@app.route('/')
+def serve():
+    return send_from_directory(app.static_folder, 'index.html')
 
 
 @app.route('/search')
@@ -29,34 +36,31 @@ def search():
     if not query:
         return jsonify({"error": "Query parameter required"}), 400
 
-    # Check freshness and fetch if needed
+    # Refresh if stale or first time
     last_fetched = get_query_last_fetched(query)
     if last_fetched is None or time.time() - last_fetched > STALE_SECONDS:
-        new_arxiv_papers = fetch_arxiv(query)
-        new_semantic_papers = fetch_semantic_scholar(query)
-        new_openalex_papers = fetch_openalex(query)
-        new_papers = new_arxiv_papers + new_semantic_papers + new_openalex_papers
+        new_arxiv = fetch_arxiv(query)
+        new_semantic = fetch_semantic_scholar(query)
+        new_openalex = fetch_openalex(query)
+        new_papers = new_arxiv + new_semantic + new_openalex
         save_papers(new_papers)
         update_query_timestamp(query)
     else:
         print(f"Using cached data for '{query}'")
 
-    # Filter from DB
     local_results = query_papers_from_db(query)
     print(f"Local results found: {len(local_results)}")
 
     if not local_results:
         return jsonify({"message": f"No papers found for query '{query}'"}), 404
-    
-    # Check full DB if not enough papers found
     elif len(local_results) < TOP_K:
-        print(f"Fallback: using all papers from DB due to insufficient matches")
+        print("Fallback: searching all papers in DB")
         local_results = get_all_papers_from_db()
 
-    # Hybrid search and summarization
     ranked = hybrid_search(query, local_results)
     top = ranked[:TOP_K]
-    summaries = summarize([paper[3] for paper in top])  # abstract id=3
+    summaries = summarize([paper[3] for paper in top])  # abstract index
+
     print(f"Hybrid searched {len(top)} papers for query '{query}'")
 
     return jsonify([
@@ -75,13 +79,19 @@ def refresh():
     if not query:
         return jsonify({"error": "Query parameter required"}), 400
 
-    new_arxiv_papers = fetch_arxiv(query)
-    new_semantic_papers = fetch_semantic_scholar(query)
-    new_openalex_papers = fetch_openalex(query)
-    new_papers = new_arxiv_papers + new_semantic_papers + new_openalex_papers
+    new_arxiv = fetch_arxiv(query)
+    new_semantic = fetch_semantic_scholar(query)
+    new_openalex = fetch_openalex(query)
+    new_papers = new_arxiv + new_semantic + new_openalex
     save_papers(new_papers)
     update_query_timestamp(query)
 
     return jsonify({
         "message": f"Refreshed {len(new_papers)} papers for query '{query}'."
     })
+
+
+# Serve React static files
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory(app.static_folder, path)
