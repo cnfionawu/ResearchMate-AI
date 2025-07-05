@@ -1,8 +1,3 @@
-# from app.api import app
-
-# if __name__ == "__main__":
-#     app.run(debug=True)
-
 import os
 from app.api import app
 
