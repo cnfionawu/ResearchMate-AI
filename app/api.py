@@ -13,8 +13,10 @@ from app.database import (
 from app.retrieval import hybrid_search
 from app.summarizer import summarize
 import time
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app) # Enable CORS for all routes
 init_db()
 
 STALE_SECONDS = 7 * 24 * 3600  # 1 week
